@@ -18,6 +18,9 @@ option(AVX512      "Compile with AVX512BITALG support" OFF)
 
 option(ALL           "Include all solvers"             OFF)
 
+# Enable SIMDe for non-x86 targets to map x86 intrinsics to NEON/scalar.
+option(USE_SIMDE     "Use SIMDe headers for non-x86 builds" OFF)
+
 option(GSS           "Include GSS"                     OFF)
 option(Z3            "Include Z3"                      OFF)
 option(GUROBI        "Include GUROBI"                  OFF)
@@ -61,24 +64,58 @@ else()
 endif()
 
 set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -${OPT} ${ARGS}")
+
+# Detect architecture and platform to avoid x86-specific flags on ARM and Apple mobile platforms.
+string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" TDOKU_CPU_LOWER)
+string(TOLOWER "${CMAKE_OSX_SYSROOT}" TDOKU_SYSROOT_LOWER)
+set(TDOKU_IS_ARM FALSE)
+if (TDOKU_CPU_LOWER MATCHES "arm" OR TDOKU_CPU_LOWER MATCHES "aarch64" OR TDOKU_CPU_LOWER MATCHES "arm64")
+    set(TDOKU_IS_ARM TRUE)
+endif()
+# Apple mobile platforms (iOS/tvOS/watchOS) often reject -march=native; also avoid on iOS simulator
+set(TDOKU_IS_APPLE_MOBILE FALSE)
+if (TDOKU_SYSROOT_LOWER MATCHES "iphone" OR CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS|watchOS")
+    set(TDOKU_IS_APPLE_MOBILE TRUE)
+endif()
+# Android toolchain also should avoid host-specific -march flags
+set(TDOKU_IS_ANDROID FALSE)
+if (ANDROID)
+    set(TDOKU_IS_ANDROID TRUE)
+endif()
+# Use this guard to avoid -m*sse or -march=native when cross-compiling or on ARM/mobile
+if (TDOKU_IS_ARM OR TDOKU_IS_APPLE_MOBILE OR TDOKU_IS_ANDROID)
+    set(TDOKU_AVOID_X86_FLAGS TRUE)
+else()
+    set(TDOKU_AVOID_X86_FLAGS FALSE)
+endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -${OPT} ${ARGS}")
 
-if(AVX512)
-    set(ArchFlags "-mavx512vl -mavx512bitalg")
-elseif(AVX2)
-    set(ArchFlags "-mavx2")
-elseif(AVX)
-    set(ArchFlags "-mavx")
-elseif(SSE4_2)
-    set(ArchFlags "-msse4.2")
-elseif(SSE4_1)
-    set(ArchFlags "-msse4.1")
-elseif(SSSE3)
-    set(ArchFlags "-mssse3")
-elseif(SSE2)
-    set(ArchFlags "-msse2")
+if (TDOKU_AVOID_X86_FLAGS)
+    # On ARM/mobile/Android, avoid x86-specific -m* flags and -march=native.
+    set(ArchFlags "")
 else()
-    set(ArchFlags "-march=${ARCH}")
+    if(AVX512)
+        set(ArchFlags "-mavx512vl -mavx512bitalg")
+    elseif(AVX2)
+        set(ArchFlags "-mavx2")
+    elseif(AVX)
+        set(ArchFlags "-mavx")
+    elseif(SSE4_2)
+        set(ArchFlags "-msse4.2")
+    elseif(SSE4_1)
+        set(ArchFlags "-msse4.1")
+    elseif(SSSE3)
+        set(ArchFlags "-mssse3")
+    elseif(SSE2)
+        set(ArchFlags "-msse2")
+    else()
+        # Avoid -march=native on compilers/platforms that don't accept it (e.g., Apple Clang on arm64)
+        if (ARCH STREQUAL "native")
+            set(ArchFlags "")
+        else()
+            set(ArchFlags "-march=${ARCH}")
+        endif()
+    endif()
 endif()
 
 set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   ${ArchFlags}")
@@ -91,9 +128,17 @@ configure_file (
 # a gcc-linkable library with just the fast solver
 add_library(tdoku_object OBJECT src/solver_dpll_triad_simd.cc src/util.cc)
 target_compile_options(tdoku_object PUBLIC -fno-exceptions -fno-rtti -fpic)
+target_include_directories(tdoku_object PUBLIC include)
+
+# If using SIMDe, add include path and define
+if (USE_SIMDE)
+    target_include_directories(tdoku_object PUBLIC ${CMAKE_SOURCE_DIR}/third_party/simde)
+    target_compile_definitions(tdoku_object PUBLIC SIMDE_ENABLE_NATIVE_ALIASES)
+endif()
 
 add_library(tdoku_static STATIC $<TARGET_OBJECTS:tdoku_object>)
 add_library(tdoku_shared SHARED $<TARGET_OBJECTS:tdoku_object>)
+set_target_properties(tdoku_shared PROPERTIES OUTPUT_NAME tdoku)
 
 set(GUROBI_DIR "gurobi900/linux64" CACHE STRING "Gurobi installation directory")
 

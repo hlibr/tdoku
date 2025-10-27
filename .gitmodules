@@ -16,3 +16,6 @@
 [submodule "other/module_gss"]
 	path = other/module_gss
 	url = https://www.github.com/bartp5/gss
+[submodule "third_party/simde"]
+	path = third_party/simde
+	url = https://github.com/simd-everywhere/simde.git

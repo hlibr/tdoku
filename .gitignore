@@ -42,3 +42,8 @@ solve
 
 grid.counts
 grid.index
+/build-android-v7a
+/build-android
+/build-ios
+/build-macos
+/build-win64-cross

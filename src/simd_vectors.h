@@ -2,7 +2,7 @@
 #define TDOKU_SIMD_VECTORS_H
 
 #include <cstring>
-#include <immintrin.h>
+#include "simd_compat.h"
 #include <memory>
 #include <tuple>
 #include <utility>
