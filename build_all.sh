@@ -18,7 +18,7 @@ set -euo pipefail
 # - Android NDK installed: set ANDROID_NDK_HOME or UNITY_NDK to the NDK root
 # - Visual Studio (MSVC) on Windows for Windows builds
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 
 # Detect NDK
@@ -37,6 +37,7 @@ function build_android_arm64() {
   cmake -B "$bdir" \
     -DCMAKE_BUILD_TYPE=Release \
     -DUSE_SIMDE=ON \
+    -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384" \
     -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
     -DANDROID_ABI=arm64-v8a \
     -DANDROID_PLATFORM=21
